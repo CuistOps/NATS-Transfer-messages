@@ -1,136 +1,86 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/nats-io/nats.go"
 )
 
 const (
-	subject     = "coffee.web.requests"
-	concurrency = 5
+	subject = "app.message"
 )
-
-type CoffeeOrder struct {
-	Size       string `json:"size"`
-	BeanType   string `json:"bean_type"`
-	Milk       string `json:"milk"`
-	Name       string `json:"name"`
-	SugarCount string `json:"sugar_count"`
-}
-
-type controllerResponse struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
 
 var (
 	nc *nats.Conn
 )
 
-func sendOrderToController(order CoffeeOrder) (controllerResponse, error) {
-	var response controllerResponse
+func sendOrderToConsumers(message string) error {
 
-	log.Printf("☕ New order received for %s", order.Name)
+	//log.Printf("☕ New order received for %s", subject)
 
-	jsonData, err := json.Marshal(order)
-	if err != nil {
-		return response, errors.New("Error converting to JSON:" + err.Error())
-
-	}
-
-	rep, err := nc.Request(subject, jsonData, 2*time.Second)
+	err := nc.Publish(subject, []byte(message))
 	if err != nil {
 		log.Printf("Error sending order: %v", err)
-		return response, err
+		return err
 	}
 
-	err = json.Unmarshal(rep.Data, &response)
-	if err != nil {
-		return response, errors.New("can't unmarshall response from controller")
-	}
-
-	return response, nil
+	return nil
 }
 
-func handleCoffeeOrder(w http.ResponseWriter, r *http.Request) {
+func handleSend(w http.ResponseWriter, r *http.Request) {
+	log.Println("🚀 New message received")
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	var order CoffeeOrder
-	err := json.NewDecoder(r.Body).Decode(&order)
-	if err != nil {
-		log.Printf("Error unmarshalling order: %v", err)
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
 
-	responseTitle := "Thank you!"
-	var controllerResponse controllerResponse
-
-	if order.Size == "" || order.BeanType == "" || order.Name == "" || order.SugarCount == "" || order.Milk == "" {
-		controllerResponse.Message = "Something's missing 🤔"
-		controllerResponse.Status = "error"
-		json.NewEncoder(w).Encode(map[string]string{"title": "Oh...", "message": controllerResponse.Message, "status": controllerResponse.Status})
-		return
-	}
-
-	controllerResponse, err = sendOrderToController(order)
-	if err != nil {
-
-		log.Println("💢 Coffee cannot be scheduled !", err)
-		controllerResponse.Status = "error"
-		responseTitle = "Oh..."
-		controllerResponse.Message = "Sadly, we were not able to discuss with our backend system..."
-	}
-
-	log.Println("🗣️ Response : ", controllerResponse.Message)
-
-	json.NewEncoder(w).Encode(map[string]string{"title": responseTitle, "message": controllerResponse.Message, "status": controllerResponse.Status})
+	message := r.FormValue("message")
+	sendOrderToConsumers(message)
 
 }
 
-func handleHome(w http.ResponseWriter, numberOfPendingOrders int) {
-
-	tmpl, err := template.ParseFiles("./src/index.html")
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+func handleHome(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html")
+	html := `
+        <html>
+            <body>
+                <h1>Send a Message</h1>
+                <form action="/send" method="POST">
+                    <label for="message">Message:</label>
+                    <input type="text" id="message" name="message">
+                    <input type="submit" value="Send">
+                </form>
+            </body>
+        </html>
+    `
+	w.Write([]byte(html))
 }
 
 func main() {
 
-	nc, err := nats.Connect(os.Getenv("NATS_URL"))
+	err := error(nil)
+
+	nc, err = nats.Connect(os.Getenv("NATS_URL"))
 	if err != nil {
 		log.Fatal("connect to nats: ", err)
 	}
 
+	log.Printf("🚀 Starting sender service with %s as NATS URI\n", os.Getenv("NATS_URL"))
+
 	defer nc.Drain()
 
-	http.HandleFunc("/send", handleCoffeeOrder)
+	http.HandleFunc("/send", handleSend)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/index", http.StatusMovedPermanently)
 	})
 
 	http.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
-
 		handleHome(w)
 	})
 
