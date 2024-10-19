@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-sender
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-sender
+  template:
+    metadata:
+      labels:
+        app: nats-sender
+    spec:
+      containers:
+        - name: sender
+          image: ghcr.io/cuistops/nats-simple-demo/sender:latest
+          env:
+            - name: NATS_URL
+              value: "nats://nats.nats.svc.cluster.local:4222"
+          ports:
+            - containerPort: 8080
+              name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-sender-service
+spec:
+  selector:
+    app: nats-sender
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
