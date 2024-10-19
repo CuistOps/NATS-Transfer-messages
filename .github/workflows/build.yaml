@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: [consumer, sender] 
+        app: [consumer, sender] # Applications à builder
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -24,9 +24,8 @@ jobs:
 
       - name: Build Docker image
         run: |
-          cd ./{{ matrix.image }}
-          docker build -t ghcr.io/${{ github.repository }}/{{ matrix.image }}:latest .
+          docker build -t ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')/${{ matrix.app }}:latest ./${{ matrix.app }}
 
       - name: Push Docker image
         run: |
-          docker push ghcr.io/${{ github.repository }}/{{ matrix.image }}:latest
+          docker push ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')/${{ matrix.app }}:latest

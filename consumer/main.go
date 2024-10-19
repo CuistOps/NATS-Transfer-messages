@@ -48,14 +48,6 @@ func main() {
 		log.Fatal("create stream : ", err)
 	}
 
-	// // random string
-	// letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	// rand.Seed(uint64(time.Now().UnixNano()))
-	// var result []rune
-	// for i := 0; i < 6; i++ {
-	// 	result = append(result, letters[rand.Intn(len(letters))])
-	// }
-
 	cfgConsu := jetstream.ConsumerConfig{
 		Name:          consumerName,
 		FilterSubject: subjects,
